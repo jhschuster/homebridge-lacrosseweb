@@ -1,0 +1,54 @@
+{
+  "pluginAlias": "LacrosseWeb",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "[homebridge-lacrosseweb](https://github.com/jhschuster/homebridge-lacrosseweb) is a Homebridge plugin to interact with La Crosse Alerts temperature/humidity sensors.",
+  "footerDisplay": "For additional help please see the [developer page](https://github.com/jhschuster/homebridge-lacrosseweb).",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "username": {
+        "title": "Lacrosse User Name",
+        "type": "string",
+        "required": true,
+	"placeholder": "username",
+	"description": "Username for your Lacrosse account"
+      },
+      "password": {
+        "title": "Lacrosse Password",
+        "type": "string",
+        "required": true,
+	"placeholder": "password",
+	"description": "Password for your Lacrosse account"
+      },
+      "apiBaseURL": {
+        "title": "Lacrosse URL",
+        "type": "string",
+	"default": "http://lacrossealertsmobile.com/v1.2",
+        "format": "uri",
+        "required": false,
+	"description": "Base URL of La Crosse Alerts Mobile website"
+      },
+      "configCacheSeconds": {
+        "title": "Cache Time",
+        "type": "integer",
+	"default": 30,
+	"minimum": 1,
+        "required": false,
+	"description": "Number of seconds for which to cache data"
+      }
+    }
+  },
+  "form": [
+    "username",
+    "password",
+    {
+	"type": "fieldset",
+	"expandable": true,
+	"title": "Advanced Settings (Optional)",
+	"description": "These are optional settings that you can adjust if needed. The defaults should work for nearly everyone.",
+	"items": ["apiBaseURL", "configCacheSeconds"]
+    }
+  ],
+  "display": null
+}
