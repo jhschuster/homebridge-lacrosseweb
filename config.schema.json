@@ -36,6 +36,14 @@
 	"minimum": 1,
         "required": false,
 	"description": "Number of seconds for which to cache data"
+      },
+      "noResponseMinutes": {
+        "title": "Not Responding Time",
+        "type": "integer",
+	"default": 30,
+	"minimum": 1,
+        "required": false,
+	"description": "Number of minutes of no data after which device is considered non-responsive"
       }
     }
   },
@@ -47,7 +55,7 @@
 	"expandable": true,
 	"title": "Advanced Settings (Optional)",
 	"description": "These are optional settings that you can adjust if needed. The defaults should work for nearly everyone.",
-	"items": ["apiBaseURL", "configCacheSeconds"]
+	"items": ["apiBaseURL", "configCacheSeconds", "noResponseMinutes"]
     }
   ],
   "display": null

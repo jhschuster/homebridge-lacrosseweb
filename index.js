@@ -60,6 +60,7 @@ LacrosseWeb.prototype = {
 	this.username = config["username"];
 	this.password = config["password"];
 	this.configCacheSeconds = config["configCacheSeconds"] || 30;
+	this.noResponseMinutes = config["noResponseMinutes"] || 30;
 	this.accessories = [];
 	this.deviceDictionary = {};
 	this.lastLogin = null;
@@ -181,12 +182,6 @@ LacrosseWeb.prototype = {
 	for (const key in devicesInitData) {
 	    const dev = devicesInitData[key];
 	    const obs = dev.obs[0];
-	    // hack: if the data are more than 30 minutes old, put it out of range values to trigger no response
-	    if (new Date().getTime()/1000 - obs.u_timestamp > 30*60) {
-		obs.ambient_temp = -101;
-		obs.probe_temp = -101;
-		obs.humidity = -101;
-	    }
 	    devices.push({
 		"device_id": dev.device_id,
 		"name": dev.device_name,
@@ -279,6 +274,11 @@ LacrosseWeb.prototype = {
 	    var name = device.name;
 	    if (!name || !this.deviceDictionary[name]) {
 		continue;
+	    }
+	    var age = new Date().getTime()/1000 - device.timestamp;
+	    if (age > 60 * this.noResponseMinutes) {
+		this.log(`Data for ${newDetails.device_name} are obsolete: ${age} seconds old`);
+		device.services = null;
 	    }
 	    this.deviceDictionary[name].updateData(device);
 	}
@@ -380,7 +380,9 @@ LacrosseWebDevice.prototype = {
 		    .getCharacteristic(Characteristic.CurrentTemperature)
 		    .on("get", callback => {
 			this.platform.refreshConfig("ambientTemp", () => {
-			    callback(null, this.details.services.ambientTemp.value);
+			    this.details.services
+				? callback(null, this.details.services.ambientTemp.value)
+				: callback(Error(), null);
 			});
 		    })
 		    .updateValue(this.details.services.ambientTemp.value);
@@ -391,7 +393,9 @@ LacrosseWebDevice.prototype = {
 			.getCharacteristic(Characteristic.CurrentTemperature)
 			.on("get", callback => {
 			    this.platform.refreshConfig("probeTemp", () => {
-				callback(null, this.details.services.probeTemp.value);
+				this.details.services
+				    ? callback(null, this.details.services.probeTemp.value)
+				    : callback(Error(), null);
 			    });
 			})
 			.updateValue(this.details.services.probeTemp.value);
@@ -402,7 +406,9 @@ LacrosseWebDevice.prototype = {
 		    .getCharacteristic(Characteristic.CurrentRelativeHumidity)
 		    .on("get", callback => {
 			this.platform.refreshConfig("currentRH", () => {
-			    callback(null, this.details.services.currentRH.value);
+			    this.details.services
+				? callback(null, this.details.services.currentRH.value)
+				: callback(Error(), null);
 			});
 		    })
 		    .updateValue(this.details.services.currentRH.value);
@@ -412,7 +418,9 @@ LacrosseWebDevice.prototype = {
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
 			this.platform.refreshConfig("lowBatt", () => {
-			    callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value]);
+			    this.details.services
+				? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
+				: callback(Error(), null);
 			});
 		    })
 		    .updateValue(this.details.services.lowBatt.value);
@@ -421,7 +429,9 @@ LacrosseWebDevice.prototype = {
 			.getCharacteristic(Characteristic.StatusLowBattery)
 			.on("get", callback => {
 			    this.platform.refreshConfig("lowBatt", () => {
-				callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value]);
+				this.details.services
+				    ? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
+				    : callback(Error(), null);
 			    });
 		    })
 		    .updateValue(this.details.services.lowBatt.value);
@@ -430,7 +440,9 @@ LacrosseWebDevice.prototype = {
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
 			this.platform.refreshConfig("lowBatt", () => {
-			    callback(null, this.details.services.lowBatt.value);
+			    this.details.services
+				? callback(null, this.details.services.lowBatt.value)
+				: callback(Error(), null);
 			});
 		    })
 		    .updateValue(this.details.services.lowBatt.value);
