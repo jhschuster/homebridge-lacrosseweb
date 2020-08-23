@@ -277,7 +277,7 @@ LacrosseWeb.prototype = {
 	    }
 	    var age = new Date().getTime()/1000 - device.timestamp;
 	    if (age > 60 * this.noResponseMinutes) {
-		this.log(`Data for ${newDetails.device_name} are obsolete: ${age} seconds old`);
+		this.log(`Data for ${name} are obsolete: ${age} seconds old`);
 		device.services = null;
 	    }
 	    this.deviceDictionary[name].updateData(device);
