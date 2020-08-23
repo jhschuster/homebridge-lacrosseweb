@@ -32,7 +32,7 @@
       "configCacheSeconds": {
         "title": "Cache Time",
         "type": "integer",
-	"default": 30,
+	"default": 960,
 	"minimum": 1,
         "required": false,
 	"description": "Number of seconds for which to cache data"

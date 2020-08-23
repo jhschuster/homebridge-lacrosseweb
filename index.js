@@ -177,11 +177,15 @@ LacrosseWeb.prototype = {
 	    this.log("getConfig JSON parsing FAILED:", matches[4]);
 	    return null;
 	}
+	this.lastConfigFetch = new Date().getTime();
 	// Parse devicesInitData into devices.
 	var devices = [ ];
 	for (const key in devicesInitData) {
 	    const dev = devicesInitData[key];
 	    const obs = dev.obs[0];
+	    if ( this.lastConfigFetch > obs.u_timestamp * 1000 ) {
+		this.lastConfigFetch = obs.u_timestamp * 1000 ;
+	    }
 	    devices.push({
 		"device_id": dev.device_id,
 		"name": dev.device_name,
@@ -217,7 +221,6 @@ LacrosseWeb.prototype = {
 	    this.log(body);
 	    return null;
 	}
-	this.lastConfigFetch = new Date().getTime();
 	this.log("getConfig:");
 	this.log(JSON.stringify(devices, null, 2));
 	return devices;
