@@ -42,7 +42,7 @@ module.exports = function (homebridge) {
 function LacrosseWeb(log, config) {
     this.log = log;
     this.config = config;
-    this.log("LacrosseWeb(log, config) called.");
+    this.log.debug("LacrosseWeb(log, config) called.");
     this.parseJSON = s => {
 	try {
 	    return JSON.parse(s);
@@ -53,7 +53,7 @@ function LacrosseWeb(log, config) {
 
 LacrosseWeb.prototype = {
     accessories: function (callback) {
-	this.log("LacrosseWeb.accessories(callback) called.");
+	this.log.debug("LacrosseWeb.accessories(callback) called.");
 	const config = this.config;
 	this.apiBaseURL = config["apiBaseURL"] || "http://lacrossealertsmobile.com/v1.2";
 	this.apiBaseURL = this.apiBaseURL.lastIndexOf("/") == this.apiBaseURL.length - 1 ? this.apiBaseURL : this.apiBaseURL + "/";
@@ -68,14 +68,14 @@ LacrosseWeb.prototype = {
 	this.refreshConfigCallbackQueue = [];
 	this.callbackRefreshConfigQueue = () => {
 	    var item = this.refreshConfigCallbackQueue.pop();
-	    this.log("callbackRefreshConfigQueue: started.");
+	    this.log.debug("callbackRefreshConfigQueue: started.");
 	    while (item) {
 		if (typeof item === "function") {
 		    item();
 		}
 		item = this.refreshConfigCallbackQueue.pop();
 	    }
-	    this.log("callbackRefreshConfigQueue: finished.");
+	    this.log.debug("callbackRefreshConfigQueue: finished.");
 	};
 	this.setupAccessories = function (accessories) {
 	    this.log("Setting up accessories/devices...");
@@ -85,10 +85,10 @@ LacrosseWeb.prototype = {
     },
 
     doLogin: async function () {
-	this.log("LacrosseWeb.doLogin() called.");
+	this.log.debug("LacrosseWeb.doLogin() called.");
 	// Get the account information page, and grab some values from it.
 	var body = await rp.get(this.apiBaseURL + "resources/js/dd/account-enhanced.js?ver=11");
-	this.log("GET /login OK");
+	this.log.debug("GET /login OK");
 	const prodKey = body.match(/var\s+prodKey\s*=\s*"([^"]+)"/m)[1];
 	const serviceURL = body.match(/var\s+serviceURL\s*=[^"]*"([^"]+)"/m)[1];
 	const matches = body.match(/setCookie\(\s*"([^"]+)"\s*,\s*response\.sessionKey\s*,\s*(\d+)/m);
@@ -132,7 +132,7 @@ LacrosseWeb.prototype = {
     },
 
     getStatus: async function () {
-	this.log("LacrosseWeb.getStatus() called.");
+	this.log.debug("LacrosseWeb.getStatus() called.");
 	var body = await rp.get(this.apiBaseURL)
 	    .catch((err) => {
 		this.log("GET /", err.statusCode);
@@ -149,12 +149,12 @@ LacrosseWeb.prototype = {
 	    this.loggedIn = false;
 	    return null;  // Didn't get state information; try logging in again.
 	}
-	this.log("GET / OK");
+	this.log.debug("GET / OK");
 	return body;
     },
 
     getConfig: async function () {
-	this.log("LacrosseWeb.getConfig() called.");
+	this.log.debug("LacrosseWeb.getConfig() called.");
 	var body;
 	while (!body) {
 	    if (!this.loggedIn && !await this.doLogin()) {
@@ -177,11 +177,15 @@ LacrosseWeb.prototype = {
 	    this.log("getConfig JSON parsing FAILED:", matches[4]);
 	    return null;
 	}
+	this.lastConfigFetch = new Date().getTime();
 	// Parse devicesInitData into devices.
 	var devices = [ ];
 	for (const key in devicesInitData) {
 	    const dev = devicesInitData[key];
 	    const obs = dev.obs[0];
+	    if ( this.lastConfigFetch > obs.u_timestamp * 1000 ) {
+		this.lastConfigFetch = obs.u_timestamp * 1000 ;
+	    }
 	    devices.push({
 		"device_id": dev.device_id,
 		"name": dev.device_name,
@@ -217,9 +221,8 @@ LacrosseWeb.prototype = {
 	    this.log(body);
 	    return null;
 	}
-	this.lastConfigFetch = new Date().getTime();
-	this.log("getConfig:");
-	this.log(JSON.stringify(devices, null, 2));
+	this.log.debug("getConfig:");
+	this.log.debug(JSON.stringify(devices, null, 2));
 	return devices;
     },
 
@@ -250,16 +253,16 @@ LacrosseWeb.prototype = {
     },
 
     refreshConfig: async function (msg, callback) {
-	this.log("Refreshing config for", msg);
+	this.log.debug("Refreshing config for", msg);
 	callback = callback || function () {};
 	if (this.lastConfigFetch && (new Date().getTime() - this.lastConfigFetch) / 1000 <= this.configCacheSeconds) {
-	    this.log(`Using cached data; less than ${this.configCacheSeconds}s old.`);
+	    this.log.debug(`Using cached data; less than ${this.configCacheSeconds}s old.`);
 	    callback();
 	    return;
 	}
 	this.refreshConfigCallbackQueue.push(callback);
 	if (this.refreshConfigInProgress) {
-	    this.log("Config refresh in progress, queueing callback.");
+	    this.log.debug("Config refresh in progress, queueing callback.");
 	    return;
 	}
 	this.refreshConfigInProgress = true;
@@ -268,7 +271,7 @@ LacrosseWeb.prototype = {
 	    this.log("Config refresh FAILED.");
 	    return;
 	}
-	this.log("Config refresh successful.");
+	this.log.debug("Config refresh successful.");
 	for (var i = 0, l = devices.length; i < l; i++) {
 	    var device = devices[i];
 	    var name = device.name;
