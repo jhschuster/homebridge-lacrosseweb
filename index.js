@@ -60,6 +60,7 @@ LacrosseWeb.prototype = {
 	this.username = config["username"];
 	this.password = config["password"];
 	this.configCacheSeconds = config["configCacheSeconds"] || 30;
+	this.noResponseMinutes = config["noResponseMinutes"] || 30;
 	this.accessories = [];
 	this.deviceDictionary = {};
 	this.lastLogin = null;
@@ -184,13 +185,21 @@ LacrosseWeb.prototype = {
 	    devices.push({
 		"device_id": dev.device_id,
 		"name": dev.device_name,
+		"timestamp": obs.u_timestamp,
 		"services": {
-		    "currentTemp": {
-			"service_name": "currentTemp",
+		    "ambientTemp": {
+			"service_name": "ambientTemp",
 			"rawvalue": obs.ambient_temp,
 			"value": isMetric
 				? obs.ambient_temp
 				: (obs.ambient_temp - 32) * 5/9
+		    },
+		    "probeTemp": {
+			"service_name": "probeTemp",
+			"rawvalue": obs.probe_temp,
+			"value": isMetric
+				? obs.probe_temp
+				: (obs.probe_temp - 32) * 5/9
 		    },
 		    "currentRH": {
 			"service_name": "currentRH",
@@ -266,6 +275,11 @@ LacrosseWeb.prototype = {
 	    if (!name || !this.deviceDictionary[name]) {
 		continue;
 	    }
+	    var age = new Date().getTime()/1000 - device.timestamp;
+	    if (age > 60 * this.noResponseMinutes) {
+		this.log(`Data for ${name} are obsolete: ${age} seconds old`);
+		device.services = null;
+	    }
 	    this.deviceDictionary[name].updateData(device);
 	}
 	this.refreshConfigInProgress = false;
@@ -293,8 +307,8 @@ function LacrosseWebDevice(log, details, platform) {
 		return intesis;
 	    },
 	    "homekit": [
-	      Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
-	      Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW
+		Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
+		Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW
 	    ]
 	}
     }
@@ -302,14 +316,41 @@ function LacrosseWebDevice(log, details, platform) {
     this.details = details;
     this.platform = platform;
     this.name = details.name;
-    this.temperatureSensor = new Service.TemperatureSensor(details.name);
+
+    this.ambientTemperatureSensor = new Service.TemperatureSensor(details.name);
+    this.ambientTemperatureSensor.subtype = "Ambient";
+    this.ambientTemperatureSensor
+	.getCharacteristic(Characteristic.CurrentTemperature)
+	.setProps({
+	    minValue: -100,
+	    maxValue: 100,
+	    description: "Ambient Temperature"
+	});
+    if (details.services.probeTemp.value) {
+	this.probeTemperatureSensor = new Service.TemperatureSensor(details.name);
+	this.probeTemperatureSensor.subtype = "Probe";
+	this.probeTemperatureSensor
+	    .getCharacteristic(Characteristic.CurrentTemperature)
+	    .setProps({
+		minValue: -100,
+		maxValue: 100,
+		description: "Probe Temperature"
+	    });
+    }
+    else {
+	this.probeTemperatureSensor = null;
+    }
+
     this.humiditySensor = new Service.HumiditySensor(details.name);
     this.accessoryInfo = new Service.AccessoryInformation();
     this.accessoryInfo
 	.setCharacteristic(Characteristic.Manufacturer, "Lacrosse")
 	.setCharacteristic(Characteristic.Model, details.name)
 	.setCharacteristic(Characteristic.SerialNumber, details.device_id);
-    this.services = [this.temperatureSensor, this.humiditySensor, this.accessoryInfo];
+    this.services = [this.ambientTemperatureSensor, this.humiditySensor, this.accessoryInfo];
+    if (this.probeTemperatureSensor) {
+	this.services.push(this.probeTemperatureSensor);
+    }
     this.setup(this.details);
 }
 
@@ -334,40 +375,74 @@ LacrosseWebDevice.prototype = {
 	const serviceName = service.service_name;
 
 	switch (serviceName) {
-	    case "currentTemp":
-		this.temperatureSensor
+	    case "ambientTemp":
+		this.ambientTemperatureSensor
 		    .getCharacteristic(Characteristic.CurrentTemperature)
 		    .on("get", callback => {
-			this.platform.refreshConfig("currentTemp", () => {
-			    callback(null, this.details.services.currentTemp.value);
+			this.platform.refreshConfig("ambientTemp", () => {
+			    this.details.services
+				? callback(null, this.details.services.ambientTemp.value)
+				: callback(Error(), null);
 			});
 		    })
-		    .updateValue(this.details.services.currentTemp.value);
+		    .updateValue(this.details.services.ambientTemp.value);
+		break;
+	    case "probeTemp":
+		if (this.probeTemperatureSensor) {
+		    this.probeTemperatureSensor
+			.getCharacteristic(Characteristic.CurrentTemperature)
+			.on("get", callback => {
+			    this.platform.refreshConfig("probeTemp", () => {
+				this.details.services
+				    ? callback(null, this.details.services.probeTemp.value)
+				    : callback(Error(), null);
+			    });
+			})
+			.updateValue(this.details.services.probeTemp.value);
+		}
 		break;
 	    case "currentRH":
 		this.humiditySensor
 		    .getCharacteristic(Characteristic.CurrentRelativeHumidity)
 		    .on("get", callback => {
 			this.platform.refreshConfig("currentRH", () => {
-			    callback(null, this.details.services.currentRH.value);
+			    this.details.services
+				? callback(null, this.details.services.currentRH.value)
+				: callback(Error(), null);
 			});
 		    })
 		    .updateValue(this.details.services.currentRH.value);
 		break;
 	    case "lowBatt":
-		this.temperatureSensor
+		this.ambientTemperatureSensor
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
 			this.platform.refreshConfig("lowBatt", () => {
-			    callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value]);
+			    this.details.services
+				? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
+				: callback(Error(), null);
 			});
 		    })
 		    .updateValue(this.details.services.lowBatt.value);
+		if (this.probeTemperatureSensor) {
+		    this.probeTemperatureSensor
+			.getCharacteristic(Characteristic.StatusLowBattery)
+			.on("get", callback => {
+			    this.platform.refreshConfig("lowBatt", () => {
+				this.details.services
+				    ? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
+				    : callback(Error(), null);
+			    });
+		    })
+		    .updateValue(this.details.services.lowBatt.value);
+		}
 		this.humiditySensor
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
 			this.platform.refreshConfig("lowBatt", () => {
-			    callback(null, this.details.services.lowBatt.value);
+			    this.details.services
+				? callback(null, this.details.services.lowBatt.value)
+				: callback(Error(), null);
 			});
 		    })
 		    .updateValue(this.details.services.lowBatt.value);
