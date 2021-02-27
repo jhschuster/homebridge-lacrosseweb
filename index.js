@@ -65,18 +65,7 @@ LacrosseWeb.prototype = {
 	this.deviceDictionary = {};
 	this.lastLogin = null;
 	this.loggedIn = false;
-	this.refreshConfigCallbackQueue = [];
-	this.callbackRefreshConfigQueue = () => {
-	    var item = this.refreshConfigCallbackQueue.pop();
-	    this.log.debug("callbackRefreshConfigQueue: started.");
-	    while (item) {
-		if (typeof item === "function") {
-		    item();
-		}
-		item = this.refreshConfigCallbackQueue.pop();
-	    }
-	    this.log.debug("callbackRefreshConfigQueue: finished.");
-	};
+	this.refreshConfigInProgress = false;
 	this.setupAccessories = function (accessories) {
 	    this.log("Setting up accessories/devices...");
 	    callback(accessories);
@@ -183,8 +172,8 @@ LacrosseWeb.prototype = {
 	for (const key in devicesInitData) {
 	    const dev = devicesInitData[key];
 	    const obs = dev.obs[0];
-	    if ( this.lastConfigFetch > obs.u_timestamp * 1000 ) {
-		this.lastConfigFetch = obs.u_timestamp * 1000 ;
+	    if (this.lastConfigFetch > obs.u_timestamp * 1000) {
+		this.lastConfigFetch = obs.u_timestamp * 1000;
 	    }
 	    devices.push({
 		"device_id": dev.device_id,
@@ -252,26 +241,24 @@ LacrosseWeb.prototype = {
 	this.setupAccessories(this.accessories);
     },
 
-    refreshConfig: async function (msg, callback) {
-	this.log.debug("Refreshing config for", msg);
-	callback = callback || function () {};
+    refreshConfig: async function (msg) {
 	if (this.lastConfigFetch && (new Date().getTime() - this.lastConfigFetch) / 1000 <= this.configCacheSeconds) {
-	    this.log.debug(`Using cached data; less than ${this.configCacheSeconds}s old.`);
-	    callback();
+	    this.log.debug(`${msg}: Using cached data; less than ${this.configCacheSeconds}s old.`);
 	    return;
 	}
-	this.refreshConfigCallbackQueue.push(callback);
 	if (this.refreshConfigInProgress) {
-	    this.log.debug("Config refresh in progress, queueing callback.");
+	    this.log.debug(`${msg}: Refresh in progress.`);
 	    return;
 	}
 	this.refreshConfigInProgress = true;
+	this.log.debug(`${msg}: Refreshing.`);
 	var devices = await this.getConfig();
 	if (!devices) {
-	    this.log("Config refresh FAILED.");
+	    this.log(`${msg}: Refresh FAILED.`);
+	    this.refreshConfigInProgress = false;
 	    return;
 	}
-	this.log.debug("Config refresh successful.");
+	this.log.debug(`${msg}: Refresh successful.`);
 	for (var i = 0, l = devices.length; i < l; i++) {
 	    var device = devices[i];
 	    var name = device.name;
@@ -286,7 +273,6 @@ LacrosseWeb.prototype = {
 	    this.deviceDictionary[name].updateData(device);
 	}
 	this.refreshConfigInProgress = false;
-	this.callbackRefreshConfigQueue();
     }
 }
 
@@ -373,20 +359,45 @@ LacrosseWebDevice.prototype = {
 	    return;
 	}
 	this.details = newDetails;
+	for (var serviceData in newDetails.services) {
+	    switch (serviceData.service_name) {
+		case "ambientTemp":
+		    this.ambientTemperatureSensor
+			.updateCharacteristic(Characteristic.CurrentTemperature, serviceData.value);
+		    break;
+		case "probeTemp":
+		    if (this.probeTemperatureSensor) {
+			this.probeTemperatureSensor
+			    .updateCharacteristic(Characteristic.CurrentTemperature, serviceData.value);
+		    }
+		    break;
+		case "currentRH":
+		    this.humiditySensor
+			.updateCharacteristic(Characteristic.CurrentRelativeHumidity, serviceData.value);
+		    break;
+		case "lowBatt":
+		    this.ambientTemperatureSensor
+			.updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[serviceData.value]);
+		    if (this.probeTemperatureSensor) {
+			this.probeTemperatureSensor
+			    .updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[serviceData.value]);
+		    }
+		    this.humiditySensor
+			.updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[serviceData.value]);
+		    break;
+	    }
+	}
     },
     addService: function (service, deviceID) {
-	const serviceName = service.service_name;
-
-	switch (serviceName) {
+	switch (service.service_name) {
 	    case "ambientTemp":
 		this.ambientTemperatureSensor
 		    .getCharacteristic(Characteristic.CurrentTemperature)
 		    .on("get", callback => {
-			this.platform.refreshConfig("ambientTemp", () => {
-			    this.details.services
-				? callback(null, this.details.services.ambientTemp.value)
-				: callback(Error(), null);
-			});
+			this.platform.refreshConfig("ambientTemp");
+			this.details.services
+			    ? callback(null, this.details.services.ambientTemp.value)
+			    : callback(Error(), null);
 		    })
 		    .updateValue(this.details.services.ambientTemp.value);
 		break;
@@ -395,11 +406,10 @@ LacrosseWebDevice.prototype = {
 		    this.probeTemperatureSensor
 			.getCharacteristic(Characteristic.CurrentTemperature)
 			.on("get", callback => {
-			    this.platform.refreshConfig("probeTemp", () => {
-				this.details.services
-				    ? callback(null, this.details.services.probeTemp.value)
-				    : callback(Error(), null);
-			    });
+			    this.platform.refreshConfig("probeTemp");
+			    this.details.services
+				? callback(null, this.details.services.probeTemp.value)
+				: callback(Error(), null);
 			})
 			.updateValue(this.details.services.probeTemp.value);
 		}
@@ -408,11 +418,10 @@ LacrosseWebDevice.prototype = {
 		this.humiditySensor
 		    .getCharacteristic(Characteristic.CurrentRelativeHumidity)
 		    .on("get", callback => {
-			this.platform.refreshConfig("currentRH", () => {
-			    this.details.services
-				? callback(null, this.details.services.currentRH.value)
-				: callback(Error(), null);
-			});
+			this.platform.refreshConfig("currentRH");
+			this.details.services
+			    ? callback(null, this.details.services.currentRH.value)
+			    : callback(Error(), null);
 		    })
 		    .updateValue(this.details.services.currentRH.value);
 		break;
@@ -420,35 +429,32 @@ LacrosseWebDevice.prototype = {
 		this.ambientTemperatureSensor
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
-			this.platform.refreshConfig("lowBatt", () => {
-			    this.details.services
-				? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
-				: callback(Error(), null);
-			});
+			this.platform.refreshConfig("lowBatt");
+			this.details.services
+			    ? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
+			    : callback(Error(), null);
 		    })
-		    .updateValue(this.details.services.lowBatt.value);
+		    .updateValue(this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value]);
 		if (this.probeTemperatureSensor) {
 		    this.probeTemperatureSensor
 			.getCharacteristic(Characteristic.StatusLowBattery)
 			.on("get", callback => {
-			    this.platform.refreshConfig("lowBatt", () => {
-				this.details.services
-				    ? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
-				    : callback(Error(), null);
-			    });
-		    })
-		    .updateValue(this.details.services.lowBatt.value);
+			    this.platform.refreshConfig("lowBatt");
+			    this.details.services
+				? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
+				: callback(Error(), null);
+			})
+			.updateValue(this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value]);
 		}
 		this.humiditySensor
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
-			this.platform.refreshConfig("lowBatt", () => {
-			    this.details.services
-				? callback(null, this.details.services.lowBatt.value)
-				: callback(Error(), null);
-			});
+			this.platform.refreshConfig("lowBatt");
+			this.details.services
+			    ? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
+			    : callback(Error(), null);
 		    })
-		    .updateValue(this.details.services.lowBatt.value);
+		    .updateValue(this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value]);
 		break;
 	}
     }
