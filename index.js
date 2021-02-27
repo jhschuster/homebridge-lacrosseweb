@@ -26,9 +26,8 @@
  */
 
 var Service, Characteristic;
-const request = require("request-promise-native");
-const jar = request.jar();
-const rp = request.defaults({"jar": jar});
+const tough = require('tough-cookie');
+const got = require("got");
 
 module.exports = function (homebridge) {
     Service = homebridge.hap.Service;
@@ -66,6 +65,15 @@ LacrosseWeb.prototype = {
 	this.lastLogin = null;
 	this.loggedIn = false;
 	this.refreshConfigInProgress = false;
+	this.cookieJar = new tough.CookieJar();
+	this.got = got.extend({
+	    prefixUrl: this.apiBaseURL,
+	    resolveBodyOnly: true,
+	    headers: {
+		// 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15'
+		'user-agent': undefined
+	    }
+	});
 	this.setupAccessories = function (accessories) {
 	    this.log("Setting up accessories/devices...");
 	    callback(accessories);
@@ -76,7 +84,17 @@ LacrosseWeb.prototype = {
     doLogin: async function () {
 	this.log.debug("LacrosseWeb.doLogin() called.");
 	// Get the account information page, and grab some values from it.
-	var body = await rp.get(this.apiBaseURL + "resources/js/dd/account-enhanced.js?ver=11");
+	var body = await this.got
+	    .get("resources/js/dd/account-enhanced.js?ver=11", {cookieJar: this.cookieJar})
+	    .catch((err) => {
+		this.log("GET /login", err.name, err.response ? err.response.statusCode : "");
+		return(null);
+	    });
+	if (!body) {
+	    this.log("Login failed. Giving up.");
+	    this.loggedIn = false;
+	    return this.loggedIn;
+	}
 	this.log.debug("GET /login OK");
 	const prodKey = body.match(/var\s+prodKey\s*=\s*"([^"]+)"/m)[1];
 	const serviceURL = body.match(/var\s+serviceURL\s*=[^"]*"([^"]+)"/m)[1];
@@ -85,16 +103,20 @@ LacrosseWeb.prototype = {
 	const cookieExpYears = matches[2];
 	// Authenticate, which returns the session key.
 	const subURL = 'https:' + serviceURL + 'user-api.php?pkey=' + prodKey + '&action=userlogin';
-	body = await rp.post({
-		"url": subURL,
-		"form": {
-		    "iLogEmail": this.username,
-		    "iLogPass": this.password
-		}
-	}).catch((err) => {
-	    this.log("POST /login", err.statusCode);
-	    return 302 == err.statusCode ? err.response.body : null;
-	});
+	body = await this.got
+	    .post({
+		    "url": subURL,
+		    "form": {
+			"iLogEmail": this.username,
+			"iLogPass": this.password
+		    }
+		},
+		{cookieJar: this.cookieJar}
+	    )
+	    .catch((err) => {
+		this.log("POST /login", err.name, err.response ? err.response.statusCode : "");
+		return err.response && 302 == err.response.statusCode ? err.response.body : null;
+	    });
 	if (!body) {
 	    this.log("Login failed. Giving up.");
 	    this.loggedIn = false;
@@ -114,7 +136,7 @@ LacrosseWeb.prototype = {
 	// know it, you don't ever need to retrieve it again.
 	const domain = this.apiBaseURL.match(/:\/\/([^\/]*)\//)[1];
 	const cookie = cookieName + '=' + body.sessionKey + '; Max-Age=' + (cookieExpYears*365*24*60*60) + '; Domain=' + domain + '; Path=/';
-	jar.setCookie(rp.cookie(cookie), this.apiBaseURL);
+	this.cookieJar.setCookieSync(cookie, this.apiBaseURL);
 	// Done
 	this.loggedIn = true;
 	return true;
@@ -122,9 +144,10 @@ LacrosseWeb.prototype = {
 
     getStatus: async function () {
 	this.log.debug("LacrosseWeb.getStatus() called.");
-	var body = await rp.get(this.apiBaseURL)
+	var body = await this.got
+	    .get("", {cookieJar: this.cookieJar})
 	    .catch((err) => {
-		this.log("GET /", err.statusCode);
+		this.log("GET /", err.name, err.response ? err.response.statusCode : "");
 		this.log(err);
 		return null;
 	    });
