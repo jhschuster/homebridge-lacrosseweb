@@ -367,7 +367,7 @@ LacrosseWebDevice.prototype = {
 	const services = details.services;
 	const deviceID = details.device_id;
 	for (const serviceName in services) {
-	    this.addService(services[serviceName], deviceID);
+	    this.addService(serviceName, services[serviceName], deviceID);
 	}
     },
 
@@ -412,8 +412,7 @@ LacrosseWebDevice.prototype = {
 	}
     },
 
-    addService: function (service, deviceID) {
-	const serviceName = service.service_name;
+    addService: function (serviceName, service, deviceID) {
 	switch (serviceName) {
 	    case "ambientTemp":
 		this.ambientTemperatureSensor
