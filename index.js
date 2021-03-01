@@ -84,7 +84,7 @@ LacrosseWeb.prototype = {
     doLogin: async function () {
 	this.log.debug("LacrosseWeb.doLogin() called.");
 	// Get the account information page, and grab some values from it.
-	var body = await this.got
+	let body = await this.got
 	    .get("resources/js/dd/account-enhanced.js?ver=11", {cookieJar: this.cookieJar})
 	    .catch((err) => {
 		this.log("GET /login", err.name, err.response ? err.response.statusCode : "");
@@ -144,7 +144,7 @@ LacrosseWeb.prototype = {
 
     getStatus: async function () {
 	this.log.debug("LacrosseWeb.getStatus() called.");
-	var body = await this.got
+	const body = await this.got
 	    .get("", {cookieJar: this.cookieJar})
 	    .catch((err) => {
 		this.log("GET /", err.name, err.response ? err.response.statusCode : "");
@@ -167,7 +167,7 @@ LacrosseWeb.prototype = {
 
     getConfig: async function () {
 	this.log.debug("LacrosseWeb.getConfig() called.");
-	var body;
+	let body = null;
 	while (!body) {
 	    if (!this.loggedIn && !await this.doLogin()) {
 		return null;
@@ -191,7 +191,7 @@ LacrosseWeb.prototype = {
 	}
 	this.lastConfigFetch = new Date().getTime();
 	// Parse devicesInitData into devices.
-	var devices = [ ];
+	let devices = [ ];
 	for (const key in devicesInitData) {
 	    const dev = devicesInitData[key];
 	    const obs = dev.obs[0];
@@ -204,25 +204,21 @@ LacrosseWeb.prototype = {
 		timestamp: obs.u_timestamp,
 		services: {
 		    ambientTemp: {
-			service_name: "ambientTemp",
 			rawvalue: obs.ambient_temp,
 			value: isMetric
 				? obs.ambient_temp
 				: (obs.ambient_temp - 32) * 5/9
 		    },
 		    probeTemp: {
-			service_name: "probeTemp",
 			rawvalue: obs.probe_temp,
 			value: isMetric
 				? obs.probe_temp
 				: (obs.probe_temp - 32) * 5/9
 		    },
 		    currentRH: {
-			service_name: "currentRH",
 			value: obs.humidity,
 		    },
 		    lowBatt: {
-			service_name: "lowBatt",
 			value: obs.lowbattery
 		    }
 		}
@@ -239,14 +235,14 @@ LacrosseWeb.prototype = {
     },
 
     instantiateAccessories: async function () {
-	var devices = await this.getConfig();
+	let devices = await this.getConfig();
 	if (!devices || devices.length == 0) {
 	    this.log("Malformed config, skipping.");
 	    return;
 	}
 	for (let i = 0, l = devices.length; i < l; i++) {
-	    let device = devices[i];
-	    let name = device.name;
+	    const device = devices[i];
+	    const name = device.name;
 	    if (!name) {
 		this.log("Device had no name, not added:");
 		this.log(JSON.stringify(device));
@@ -275,20 +271,20 @@ LacrosseWeb.prototype = {
 	}
 	this.refreshConfigInProgress = true;
 	this.log.debug(`${msg}: Refreshing.`);
-	var devices = await this.getConfig();
+	let devices = await this.getConfig();
 	if (!devices) {
 	    this.log(`${msg}: Refresh FAILED.`);
 	    this.refreshConfigInProgress = false;
 	    return;
 	}
 	this.log.debug(`${msg}: Refresh successful.`);
-	for (var i = 0, l = devices.length; i < l; i++) {
-	    var device = devices[i];
-	    var name = device.name;
+	for (let i = 0, l = devices.length; i < l; i++) {
+	    const device = devices[i];
+	    const name = device.name;
 	    if (!name || !this.deviceDictionary[name]) {
 		continue;
 	    }
-	    var age = new Date().getTime()/1000 - device.timestamp;
+	    const age = new Date().getTime()/1000 - device.timestamp;
 	    if (age > 60 * this.noResponseMinutes) {
 		this.log(`Data for ${name} are obsolete: ${age} seconds old`);
 		device.services = null;
@@ -368,9 +364,9 @@ function LacrosseWebDevice(log, details, platform) {
 
 LacrosseWebDevice.prototype = {
     setup: function (details) {
-	var services = details.services;
-	var deviceID = details.device_id;
-	for (var serviceName in services) {
+	const services = details.services;
+	const deviceID = details.device_id;
+	for (const serviceName in services) {
 	    this.addService(services[serviceName], deviceID);
 	}
     },
@@ -384,31 +380,33 @@ LacrosseWebDevice.prototype = {
 	    return;
 	}
 	this.details = newDetails;
-	for (var serviceData in newDetails.services) {
-	    switch (serviceData.service_name) {
+	const services = newDetails.services;
+	for (const serviceName in services) {
+	    const value = services[serviceName].value;
+	    switch (serviceName) {
 		case "ambientTemp":
 		    this.ambientTemperatureSensor
-			.updateCharacteristic(Characteristic.CurrentTemperature, serviceData.value);
+			.updateCharacteristic(Characteristic.CurrentTemperature, value);
 		    break;
 		case "probeTemp":
 		    if (this.probeTemperatureSensor) {
 			this.probeTemperatureSensor
-			    .updateCharacteristic(Characteristic.CurrentTemperature, serviceData.value);
+			    .updateCharacteristic(Characteristic.CurrentTemperature, value);
 		    }
 		    break;
 		case "currentRH":
 		    this.humiditySensor
-			.updateCharacteristic(Characteristic.CurrentRelativeHumidity, serviceData.value);
+			.updateCharacteristic(Characteristic.CurrentRelativeHumidity, value);
 		    break;
 		case "lowBatt":
 		    this.ambientTemperatureSensor
-			.updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[serviceData.value]);
+			.updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[value]);
 		    if (this.probeTemperatureSensor) {
 			this.probeTemperatureSensor
-			    .updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[serviceData.value]);
+			    .updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[value]);
 		    }
 		    this.humiditySensor
-			.updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[serviceData.value]);
+			.updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[value]);
 		    break;
 	    }
 	}
