@@ -54,7 +54,7 @@ LacrosseWeb.prototype = {
     accessories: function (callback) {
 	this.log.debug("LacrosseWeb.accessories(callback) called.");
 	const config = this.config;
-	this.apiBaseURL = config["apiBaseURL"] || "http://lacrossealertsmobile.com/v1.2";
+	this.apiBaseURL = config["apiBaseURL"] || "https://lacrossealertsmobile.com/v1.2";
 	this.apiBaseURL = this.apiBaseURL.lastIndexOf("/") == this.apiBaseURL.length - 1 ? this.apiBaseURL : this.apiBaseURL + "/";
 	this.username = config["username"];
 	this.password = config["password"];
@@ -66,14 +66,16 @@ LacrosseWeb.prototype = {
 	this.loggedIn = false;
 	this.refreshConfigInProgress = false;
 	this.cookieJar = new tough.CookieJar();
-	this.got = got.extend({
-	    prefixUrl: this.apiBaseURL,
+	var gotOpts = {
 	    resolveBodyOnly: true,
 	    headers: {
-		// 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15'
 		'user-agent': undefined
 	    }
-	});
+	};
+	if (config["allowBadSSL"]) {
+	    gotOpts.https = { rejectUnauthorized: false };
+	}
+	this.got = got.extend(gotOpts);
 	this.setupAccessories = function (accessories) {
 	    this.log("Setting up accessories/devices...");
 	    callback(accessories);
@@ -85,7 +87,7 @@ LacrosseWeb.prototype = {
 	this.log.debug("LacrosseWeb.doLogin() called.");
 	// Get the account information page, and grab some values from it.
 	let body = await this.got
-	    .get("resources/js/dd/account-enhanced.js?ver=11", {cookieJar: this.cookieJar})
+	    .get(this.apiBaseURL + "resources/js/dd/account-enhanced.js?ver=11", {cookieJar: this.cookieJar})
 	    .catch((err) => {
 		this.log("GET /login", err.name, err.response ? err.response.statusCode : "");
 		return(null);
@@ -104,14 +106,14 @@ LacrosseWeb.prototype = {
 	// Authenticate, which returns the session key.
 	const subURL = 'https:' + serviceURL + 'user-api.php?pkey=' + prodKey + '&action=userlogin';
 	body = await this.got
-	    .post({
-		    url: subURL,
+	    .post(subURL,
+		{
 		    form: {
 			iLogEmail: this.username,
 			iLogPass: this.password
-		    }
-		},
-		{cookieJar: this.cookieJar}
+		    },
+		    cookieJar: this.cookieJar
+		}
 	    )
 	    .catch((err) => {
 		this.log("POST /login", err.name, err.response ? err.response.statusCode : "");
@@ -145,7 +147,7 @@ LacrosseWeb.prototype = {
     getStatus: async function () {
 	this.log.debug("LacrosseWeb.getStatus() called.");
 	const body = await this.got
-	    .get("", {cookieJar: this.cookieJar})
+	    .get(this.apiBaseURL, {cookieJar: this.cookieJar})
 	    .catch((err) => {
 		this.log("GET /", err.name, err.response ? err.response.statusCode : "");
 		this.log(err);
