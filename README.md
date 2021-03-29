@@ -38,4 +38,4 @@ Here is an example stanza for your config.json:
 * `apiBaseURL` - The URL to the Lacrosse Alerts web site. Defaults to "https://lacrossealertsmobile.com/v1.2".
 * `configCacheSeconds` - The number of seconds to cache the Lacrosse Alerts configuration for. This prevents the plugin from constantly scraping their website. The default value is 960.
 * `noResponseMinutes` - The number of minutes of no new data after which to report to HomeKit that the device is not responding. The default value is 30.
-* `allowBadSSL` - Whether or not to allow bad certificates in SSL connections. The default is false, but you probably will need to set it to true because Lacrosse uses a self-signed certificate on their website.
+* `allowBadSSL` - Whether or not to allow bad certificates in SSL connections. The default should be false, but I've made it be true because Lacrosse is currently using a self-signed certificate on their website.

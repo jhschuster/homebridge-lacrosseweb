@@ -48,7 +48,7 @@
       "allowBadSSL": {
         "title": "Allow Bad SSL",
         "type": "boolean",
-        "default": false,
+        "default": true,
         "required": false,
         "description": "Allow connections to hosts with bad certificates."
       }

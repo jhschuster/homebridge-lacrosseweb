@@ -72,7 +72,7 @@ LacrosseWeb.prototype = {
 		'user-agent': undefined
 	    }
 	};
-	if (config["allowBadSSL"]) {
+	if (config["allowBadSSL"] || config["allowBadSSL"] !== false) {
 	    gotOpts.https = { rejectUnauthorized: false };
 	}
 	this.got = got.extend(gotOpts);
