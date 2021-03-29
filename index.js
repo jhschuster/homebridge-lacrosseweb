@@ -58,7 +58,7 @@ LacrosseWeb.prototype = {
 	this.apiBaseURL = this.apiBaseURL.lastIndexOf("/") == this.apiBaseURL.length - 1 ? this.apiBaseURL : this.apiBaseURL + "/";
 	this.username = config["username"];
 	this.password = config["password"];
-	this.configCacheSeconds = config["configCacheSeconds"] || 30;
+	this.configCacheSeconds = config["configCacheSeconds"] || 960;
 	this.noResponseMinutes = config["noResponseMinutes"] || 30;
 	this.accessories = [];
 	this.deviceDictionary = {};
