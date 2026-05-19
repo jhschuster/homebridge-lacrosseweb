@@ -1,6 +1,6 @@
 {
   "name": "homebridge-lacrosseweb",
-  "version": "1.0.12",
+  "version": "2.0.0",
   "description": "Homebridge plugin for La Crosse Alerts, using their web interface.",
   "main": "index.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "homebridge-lacrosseweb",
     "homebridge",
     "lacrosseweb",
-    "lacrosse"
+    "lacrosse",
+    "homebridge-2.0"
   ],
   "author": {
     "name": "Jay Schuster",
@@ -20,8 +21,8 @@
   },
   "license": "MIT",
   "engines": {
-    "homebridge": ">=0.4.0",
-    "node": ">=0.12.0"
+    "homebridge": "^1.6.0 || ^2.0.0-beta.0",
+    "node": ">=18.20.4"
   },
   "dependencies": {
     "got": "^11.8.2",

@@ -81,6 +81,11 @@ LacrosseWeb.prototype = {
 	    callback(accessories);
 	};
 	this.instantiateAccessories();
+	// Start background polling for better performance
+	this.pollingInterval = setInterval(() => {
+	    this.refreshConfig('Background poll');
+	}, (this.configCacheSeconds || 30) * 1000);
+	this.log(`Background polling started (every ${this.configCacheSeconds || 30} seconds)`);
     },
 
     doLogin: async function () {
@@ -294,6 +299,14 @@ LacrosseWeb.prototype = {
 	    this.deviceDictionary[name].updateData(device);
 	}
 	this.refreshConfigInProgress = false;
+    },
+
+    shutdown: function() {
+	if (this.pollingInterval) {
+	    clearInterval(this.pollingInterval);
+	    this.pollingInterval = null;
+	    this.log("Background polling stopped");
+	}
     }
 }
 
@@ -381,24 +394,36 @@ LacrosseWebDevice.prototype = {
 	if (!newDetails) {
 	    return;
 	}
+	const oldDetails = this.details;
 	this.details = newDetails;
 	const services = newDetails.services;
 	for (const serviceName in services) {
 	    const value = services[serviceName].value;
+	    const oldValue = oldDetails.services ? oldDetails.services[serviceName]?.value : null;
+	    const changed = oldValue !== null && oldValue !== value;
 	    switch (serviceName) {
 		case "ambientTemp":
 		    this.ambientTemperatureSensor
 			.updateCharacteristic(Characteristic.CurrentTemperature, value);
+		    if (changed) {
+			this.log(`${this.name}: Ambient Temp changed: ${oldValue} → ${value}`);
+		    }
 		    break;
 		case "probeTemp":
 		    if (this.probeTemperatureSensor) {
 			this.probeTemperatureSensor
 			    .updateCharacteristic(Characteristic.CurrentTemperature, value);
 		    }
+		    if (changed) {
+			this.log(`${this.name}: Probe Temp changed: ${oldValue} → ${value}`);
+		    }
 		    break;
 		case "currentRH":
 		    this.humiditySensor
 			.updateCharacteristic(Characteristic.CurrentRelativeHumidity, value);
+		    if (changed) {
+			this.log(`${this.name}: Humidity changed: ${oldValue} → ${value}`);
+		    }
 		    break;
 		case "lowBatt":
 		    this.ambientTemperatureSensor
@@ -409,6 +434,9 @@ LacrosseWebDevice.prototype = {
 		    }
 		    this.humiditySensor
 			.updateCharacteristic(Characteristic.StatusLowBattery, this.dataMap.lowBatt.homekit[value]);
+		    if (changed) {
+			this.log(`${this.name}: Battery changed: ${this.dataMap.lowBatt.homekit[oldValue]} → ${this.dataMap.lowBatt.homekit[value]}`);
+		    }
 		    break;
 	    }
 	}
@@ -420,7 +448,7 @@ LacrosseWebDevice.prototype = {
 		this.ambientTemperatureSensor
 		    .getCharacteristic(Characteristic.CurrentTemperature)
 		    .on("get", callback => {
-			this.platform.refreshConfig(`${this.name}: ${serviceName}`);
+			// Background polling handles refresh
 			this.details.services
 			    ? callback(null, this.details.services.ambientTemp.value)
 			    : callback(Error(), null);
@@ -432,7 +460,7 @@ LacrosseWebDevice.prototype = {
 		    this.probeTemperatureSensor
 			.getCharacteristic(Characteristic.CurrentTemperature)
 			.on("get", callback => {
-			    this.platform.refreshConfig(`${this.name}: ${serviceName}`);
+			    // Background polling handles refresh
 			    this.details.services
 				? callback(null, this.details.services.probeTemp.value)
 				: callback(Error(), null);
@@ -444,7 +472,7 @@ LacrosseWebDevice.prototype = {
 		this.humiditySensor
 		    .getCharacteristic(Characteristic.CurrentRelativeHumidity)
 		    .on("get", callback => {
-			this.platform.refreshConfig(`${this.name}: ${serviceName}`);
+			// Background polling handles refresh
 			this.details.services
 			    ? callback(null, this.details.services.currentRH.value)
 			    : callback(Error(), null);
@@ -455,7 +483,7 @@ LacrosseWebDevice.prototype = {
 		this.ambientTemperatureSensor
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
-			this.platform.refreshConfig(`${this.name}: ${serviceName} ambientTemp`);
+			// Background polling handles refresh
 			this.details.services
 			    ? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
 			    : callback(Error(), null);
@@ -465,7 +493,7 @@ LacrosseWebDevice.prototype = {
 		    this.probeTemperatureSensor
 			.getCharacteristic(Characteristic.StatusLowBattery)
 			.on("get", callback => {
-			    this.platform.refreshConfig(`${this.name}: ${serviceName} probeTemp`);
+			    // Background polling handles refresh
 			    this.details.services
 				? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
 				: callback(Error(), null);
@@ -475,7 +503,7 @@ LacrosseWebDevice.prototype = {
 		this.humiditySensor
 		    .getCharacteristic(Characteristic.StatusLowBattery)
 		    .on("get", callback => {
-			this.platform.refreshConfig(`${this.name}: ${serviceName} currentRH`);
+			// Background polling handles refresh
 			this.details.services
 			    ? callback(null, this.dataMap.lowBatt.homekit[this.details.services.lowBatt.value])
 			    : callback(Error(), null);
